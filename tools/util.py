@@ -4,33 +4,29 @@
 from language.language import IPCONFIG_COMMAND_NOT_FOUND
 from language.language import ARPSPOOF_PERMISSION_DENIED
 from language.language import ARPSPOOF_COMMAND_NOT_FOUND
+from language.language import UPDATE_CONNECTED_USERS
 from language.language import OPTION_IS_NOT_IN_LIST
 from language.language import ARP_COMMAND_NOT_FOUND
-from language.language import INCOMPLETE_DATA
 from language.language import DISCOVERING_DEVICES
-from language.language import VIEW_AS_IP
+from language.language import INCOMPLETE_DATA
 from language.language import VIEW_AS_MAC
-from language.language import UPDATE_CONNECTED_USERS
-from language.language import STOPPING_ARPSPOOF
-from re import findall
-from re import sub
+from language.language import VIEW_AS_IP
+from tools.arpspoof_thread import ArpSpoofThread
+from tools.config_manager import SYS_NAME
 from subprocess import Popen
 from subprocess import PIPE
 from subprocess import run
-from subprocess import call
-from tools.config_manager import SYS_NAME
+from re import findall
+from re import sub
 
 
 #
 # Makes user select an option
 #
-def choose_option(options, options_values=None, to_uppercase=True):
+def choose_option(options, options_values=None):
     option = None
     while option not in options:
-        option = input("> ")
-        if to_uppercase:
-            option = option.upper()
-
+        option = input("> ").upper()
         if option not in options:
             print(OPTION_IS_NOT_IN_LIST % options)
 
@@ -88,7 +84,7 @@ def run_ip_a() -> str:
 #
 def check_arpspoof() -> bool:
     try:
-        process = run("arpspoof", capture_output=True)
+        process = run("./arpspoof", capture_output=True)
         output = process.stderr.decode("utf-8")
         if "found" in output:
             print(ARPSPOOF_COMMAND_NOT_FOUND)
@@ -99,7 +95,7 @@ def check_arpspoof() -> bool:
             return False
 
         return True
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         print(ARPSPOOF_COMMAND_NOT_FOUND)
         return False
 
@@ -107,14 +103,10 @@ def check_arpspoof() -> bool:
 #
 # Runs arpspoof
 #
-def run_single_arpspoof(victim, gateway, working_interface=None):
-    try:
-        process_success = True
-        cmd = "arpspoof -i " + str(working_interface) + " -t " + victim + " " + gateway
-        while process_success:
-            process_success = call(cmd, shell=True) == 0
-    except KeyboardInterrupt:
-        print(STOPPING_ARPSPOOF)
+def run_single_arpspoof(victim, gateway, working_interface=None) -> ArpSpoofThread:
+    return ArpSpoofThread(victim, gateway, working_interface)
+    # process.start()
+    # process.stop()
 
 
 #
