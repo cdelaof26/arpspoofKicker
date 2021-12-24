@@ -14,7 +14,7 @@ class ArpSpoofThread(Thread):
         self.terminated = False
 
     def run(self):
-        self.process = Popen(["./arpspoof", "-i", self.working_interface, "-t", self.victim, self.gateway],
+        self.process = Popen(["arpspoof", "-i", self.working_interface, "-t", self.victim, self.gateway],
                              stdout=DEVNULL, stderr=STDOUT)
         self.process.wait()
 

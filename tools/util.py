@@ -84,7 +84,7 @@ def run_ip_a() -> str:
 #
 def check_arpspoof() -> bool:
     try:
-        process = run("./arpspoof", capture_output=True)
+        process = run("arpspoof", capture_output=True)
         output = process.stderr.decode("utf-8")
         if "found" in output:
             print(ARPSPOOF_COMMAND_NOT_FOUND)
