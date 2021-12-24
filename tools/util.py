@@ -11,6 +11,12 @@ from language.language import DISCOVERING_DEVICES
 from language.language import INCOMPLETE_DATA
 from language.language import VIEW_AS_MAC
 from language.language import VIEW_AS_IP
+
+from language.language import DELETE_THREAD
+from language.language import STOP_THREAD
+from language.language import STOPPING
+from language.language import THREAD_V_G
+
 from tools.arpspoof_thread import ArpSpoofThread
 from tools.config_manager import SYS_NAME
 from subprocess import Popen
@@ -18,6 +24,7 @@ from subprocess import PIPE
 from subprocess import run
 from re import findall
 from re import sub
+from time import sleep
 
 
 #
@@ -157,7 +164,7 @@ def retrieve_connected_users(interface=None) -> list:
         output = run_arp_a(interface)
     except FileNotFoundError:
         print(ARP_COMMAND_NOT_FOUND)
-        return [None, None]
+        return [False, [], []]
 
     # Converts \n and \t into its representation
     output = sub(r"[\\]+[n]", "\n", output)
@@ -219,3 +226,67 @@ def choose_ip(msg, working_interface=None) -> str:
         return user_address
     else:
         return devices_ip[devices_mac.index(user_address)]
+
+
+#
+# Stops all active threads
+#
+def exit_end_threads(arpspoof_threads):
+    while 0 < len(arpspoof_threads):
+        thread = arpspoof_threads[0]
+        if thread.is_running and not (thread.terminated or thread.ended_unexpectedly):
+            print(STOPPING + THREAD_V_G % (thread.victim, thread.gateway))
+            thread.stop()
+            sleep(1)
+        arpspoof_threads.remove(thread)
+
+
+#
+# Basic management for threads
+#
+def manage_threads(arpspoof_threads):
+    end_all = False
+    delete_all = False
+    thread_i = 0
+    while thread_i < len(arpspoof_threads):
+        thread = arpspoof_threads[thread_i]
+
+        if thread.is_running and not (thread.terminated or thread.ended_unexpectedly):
+            end_current = end_all
+            if not end_current:
+                print(STOP_THREAD % thread.victim)
+                end_current = choose_option(["1", "2", "3"], [True, False, "all"])
+                if end_current == "all":
+                    end_current = True
+                    end_all = True
+
+            if end_current:
+                print(STOPPING + THREAD_V_G % (thread.victim, thread.gateway))
+                thread.stop()
+                arpspoof_threads.remove(thread)
+                sleep(1)
+            else:
+                thread_i += 1
+        else:
+            delete_current = delete_all or (thread.is_running and (thread.terminated or thread.ended_unexpectedly))
+            if not delete_current:
+                print(DELETE_THREAD % thread.victim)
+                delete_current = choose_option(["1", "2", "3"], [True, False, "all"])
+                if delete_current == "all":
+                    delete_current = True
+                    delete_all = True
+
+            if delete_current:
+                arpspoof_threads.remove(thread)
+            else:
+                thread_i += 1
+
+
+#
+# Checks if there is already a thread pointing to new_victim
+#
+def is_duplicated_victim(arpspoof_threads, new_victim) -> bool:
+    for t in arpspoof_threads:
+        if t.victim == new_victim and not (t.terminated or t.ended_unexpectedly):
+            return True
+    return False
