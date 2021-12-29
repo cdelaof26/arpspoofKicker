@@ -4,19 +4,21 @@
 from language.language import IPCONFIG_COMMAND_NOT_FOUND
 from language.language import ARPSPOOF_PERMISSION_DENIED
 from language.language import ARPSPOOF_COMMAND_NOT_FOUND
+from language.language import NO_INTERFACES_WERE_FOUND
 from language.language import UPDATE_CONNECTED_USERS
 from language.language import OPTION_IS_NOT_IN_LIST
 from language.language import ARP_COMMAND_NOT_FOUND
 from language.language import DISCOVERING_DEVICES
+from language.language import SELECT_AN_INTERFACE
+from language.language import SELECT_THE_GATEWAY
+from language.language import CONFIRM_INTERFACE
+from language.language import SELECT_AN_OPTION
 from language.language import INCOMPLETE_DATA
+from language.language import SELECT_OPTIONS
 from language.language import VIEW_AS_MAC
 from language.language import VIEW_AS_IP
-
-from language.language import DELETE_THREAD
-from language.language import STOP_THREAD
-from language.language import STOPPING
-from language.language import THREAD_V_G
-
+from language.language import SELECT_ALL
+from language.language import FINISH
 from tools.arpspoof_thread import ArpSpoofThread
 from tools.config_manager import SYS_NAME
 from subprocess import Popen
@@ -24,7 +26,6 @@ from subprocess import PIPE
 from subprocess import run
 from re import findall
 from re import sub
-from time import sleep
 
 
 #
@@ -59,12 +60,71 @@ def create_options_list(options_list) -> list:
 
 
 #
+# Makes user select one or more options from list
+#
+def choose_from_list(options_org, max_items=None) -> list:
+    if max_items is None:
+        max_items = len(options_org)
+
+    options_list = options_org.copy()
+    options_list += [FINISH, SELECT_ALL]
+
+    selected_items = list()
+
+    while len(selected_items) < max_items:
+        printable_list, options, options_values = create_options_list(options_list)
+        print(printable_list)
+        print(SELECT_OPTIONS % (len(selected_items), max_items))
+        option = choose_option(options, options_values)
+        if option != FINISH and option != SELECT_ALL:
+            selected_items.append(option)
+            options_list.remove(option)
+        elif option == SELECT_ALL:
+            return options_org
+        else:
+            break
+
+    return selected_items
+
+
+#
+# Makes user select one or more threads
+#
+def choose_threads(arpspoof_threads, options_list) -> list:
+    options_list += [FINISH, SELECT_ALL]
+
+    selected_threads_i = list()
+
+    while len(selected_threads_i) < len(arpspoof_threads):
+        printable_list, options, options_values = create_options_list(options_list)
+        print(printable_list)
+        print(SELECT_AN_OPTION)
+        option = choose_option(options, options_values)
+        if option != FINISH and option != SELECT_ALL:
+            for i, thread in enumerate(arpspoof_threads):
+                if thread.victim == option:
+                    options_list.remove(option)
+                    selected_threads_i.append(i)
+                    break
+        elif option == SELECT_ALL:
+            for i in range(len(arpspoof_threads)):
+                selected_threads_i.append(i)
+            break
+        else:
+            break
+
+    return selected_threads_i
+
+
+#
 # Runs arp -i [interface] -a
 #
 def run_arp_a(interface=None) -> str:
-    if SYS_NAME == "nt":
+    if interface is None:
+        # Windows
         process = Popen("arp -a", stdout=PIPE)
     else:
+        # Unix and unix-like
         process = Popen(["arp", "-i", interface, "-a"], stdout=PIPE)
 
     return (process.communicate()[0]).decode("utf-8")
@@ -89,7 +149,7 @@ def run_ip_a() -> str:
 #
 # Checks if arpspoof command exist
 #
-def check_arpspoof() -> bool:
+def arpspoof_available() -> bool:
     try:
         process = run("arpspoof", capture_output=True)
         output = process.stderr.decode("utf-8")
@@ -110,7 +170,7 @@ def check_arpspoof() -> bool:
 #
 # Runs arpspoof
 #
-def run_single_arpspoof(victim, gateway, working_interface=None) -> ArpSpoofThread:
+def create_arpspoof_thread(victim, gateway, working_interface=None) -> ArpSpoofThread:
     return ArpSpoofThread(victim, gateway, working_interface)
     # process.start()
     # process.stop()
@@ -156,10 +216,34 @@ def retrieve_interfaces() -> list:
 
 
 #
+# Let's user select a INTERFACE
+#
+def select_interface() -> str:
+    interfaces = retrieve_interfaces()
+
+    working_interface = None
+
+    if not interfaces and SYS_NAME != "nt":
+        input(NO_INTERFACES_WERE_FOUND)
+        exit(0)
+    elif SYS_NAME != "nt":
+        printable_list, options, options_values = create_options_list(interfaces)
+        confirm_interface = False
+        while not confirm_interface:
+            print(printable_list)
+            print(SELECT_AN_INTERFACE)
+            working_interface = choose_option(options, options_values)
+            print(CONFIRM_INTERFACE % working_interface)
+            confirm_interface = choose_option(["1", "2"], [True, False])
+
+    return working_interface
+
+
+#
 # Gets str-form output from command
 # and replaces some things
 #
-def retrieve_connected_users(interface=None) -> list:
+def retrieve_connected_users(interface=None, gateway=None) -> list:
     try:
         output = run_arp_a(interface)
     except FileNotFoundError:
@@ -180,13 +264,22 @@ def retrieve_connected_users(interface=None) -> list:
     if not available_mac:
         print(INCOMPLETE_DATA)
 
+    #
+    # Removes gateway if its already defined
+    #
+    if gateway is not None and gateway in connected_users_ip:
+        delete = connected_users_ip.index(gateway)
+        connected_users_ip.pop(delete)
+        if available_mac:
+            connected_users_mac.pop(delete)
+
     return [available_mac, connected_users_ip, connected_users_mac]
 
 
 #
 # Chooses a single ip
 #
-def choose_ip(msg, working_interface=None) -> str:
+def choose_ip(msg, working_interface=None, gateway=None) -> str:
     re_run = True
     view_as_ip = True
     user_address = None
@@ -196,7 +289,7 @@ def choose_ip(msg, working_interface=None) -> str:
         if re_run:
             re_run = False
             print(DISCOVERING_DEVICES)
-            show_as_mac, devices_ip, devices_mac = retrieve_connected_users(working_interface)
+            show_as_mac, devices_ip, devices_mac = retrieve_connected_users(working_interface, gateway)
 
             if show_as_mac:
                 devices_ip += [VIEW_AS_MAC, UPDATE_CONNECTED_USERS]
@@ -229,64 +322,7 @@ def choose_ip(msg, working_interface=None) -> str:
 
 
 #
-# Stops all active threads
+# Let's user select a GATEWAY
 #
-def exit_end_threads(arpspoof_threads):
-    while 0 < len(arpspoof_threads):
-        thread = arpspoof_threads[0]
-        if thread.is_running and not (thread.terminated or thread.ended_unexpectedly):
-            print(STOPPING + THREAD_V_G % (thread.victim, thread.gateway))
-            thread.stop()
-            sleep(1)
-        arpspoof_threads.remove(thread)
-
-
-#
-# Basic management for threads
-#
-def manage_threads(arpspoof_threads):
-    end_all = False
-    delete_all = False
-    thread_i = 0
-    while thread_i < len(arpspoof_threads):
-        thread = arpspoof_threads[thread_i]
-
-        if thread.is_running and not (thread.terminated or thread.ended_unexpectedly):
-            end_current = end_all
-            if not end_current:
-                print(STOP_THREAD % thread.victim)
-                end_current = choose_option(["1", "2", "3"], [True, False, "all"])
-                if end_current == "all":
-                    end_current = True
-                    end_all = True
-
-            if end_current:
-                print(STOPPING + THREAD_V_G % (thread.victim, thread.gateway))
-                thread.stop()
-                arpspoof_threads.remove(thread)
-                sleep(1)
-            else:
-                thread_i += 1
-        else:
-            delete_current = delete_all or (thread.is_running and (thread.terminated or thread.ended_unexpectedly))
-            if not delete_current:
-                print(DELETE_THREAD % thread.victim)
-                delete_current = choose_option(["1", "2", "3"], [True, False, "all"])
-                if delete_current == "all":
-                    delete_current = True
-                    delete_all = True
-
-            if delete_current:
-                arpspoof_threads.remove(thread)
-            else:
-                thread_i += 1
-
-
-#
-# Checks if there is already a thread pointing to new_victim
-#
-def is_duplicated_victim(arpspoof_threads, new_victim) -> bool:
-    for t in arpspoof_threads:
-        if t.victim == new_victim and not (t.terminated or t.ended_unexpectedly):
-            return True
-    return False
+def select_gateway(interface) -> str:
+    return choose_ip(SELECT_THE_GATEWAY, interface)

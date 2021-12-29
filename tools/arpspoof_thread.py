@@ -1,4 +1,3 @@
-from language.language import THREAD_ENDED_UNEXPECTEDLY
 from subprocess import DEVNULL
 from subprocess import STDOUT
 from subprocess import Popen
@@ -26,7 +25,6 @@ class ArpSpoofThread(Thread):
         #
         if not self.terminated:
             self.ended_unexpectedly = True
-            print(THREAD_ENDED_UNEXPECTEDLY % self.victim)
 
     def stop(self):
         self.terminated = True
