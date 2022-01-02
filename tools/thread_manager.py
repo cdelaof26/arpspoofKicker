@@ -60,9 +60,11 @@ class DoSManager:
 
         for thread_i in threads_to_run:
             thread = self.arpspoof_threads[thread_i]
-            print(STARTING + THREAD_V_G % (thread.victim, thread.gateway))
-            thread.start()
-            sleep(0.5)
+            # This validation is needed since "select all" option will select all threads (IDs)
+            if not (thread.terminated or thread.ended_unexpectedly):
+                print(STARTING + THREAD_V_G % (thread.victim, thread.gateway))
+                thread.start()
+                sleep(0.5)
 
     #
     # Let's user select which threads stop or delete
@@ -101,6 +103,7 @@ class DoSManager:
             elif thread.ended_unexpectedly:
                 print(THREAD_ENDED_UNEXPECTEDLY % thread.victim)
             else:
+                # Same as "elif not thread.is_running or thread.terminated"
                 print(THREAD_IS_NOT_RUNNING % thread.victim)
             sleep(0.5)
         print()

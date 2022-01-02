@@ -151,7 +151,11 @@ def run_ip_a() -> str:
 #
 def arpspoof_available() -> bool:
     try:
-        process = run("arpspoof", capture_output=True)
+        if SYS_NAME == "nt":
+            process = run("arpspoof.exe", capture_output=True)
+        else:
+            process = run("arpspoof", capture_output=True)
+
         output = process.stderr.decode("utf-8")
         if "found" in output:
             print(ARPSPOOF_COMMAND_NOT_FOUND)
@@ -257,8 +261,23 @@ def retrieve_connected_users(interface=None, gateway=None) -> list:
     # Looks for any string like "192.168.XXX.XXX"
     connected_users_ip = findall(r"[\d]{1,3}[.][\d]{1,3}[.][\d]{1,3}[.][\d]{1,3}", output)
 
-    # Looks for any string like "XX:XX:XX:XX:XX:XX"
-    connected_users_mac = findall(r"[\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}", output)
+    if SYS_NAME == "nt":
+        # Looks for any interfaces (listened as IP)
+        # Like "Interface: XXX.XXX.XXX.XXX ---"
+        interfaces = findall(r"[\d]{1,3}[.][\d]{1,3}[.][\d]{1,3}[.][\d]{1,3}[ ][-]", output)
+        for interface in interfaces:
+            try:
+                interface = interface.replace(" -", "")
+                connected_users_ip.remove(interface)
+            except ValueError:
+                pass
+
+        # Looks for any string like "XX-XX-XX-XX-XX-XX"
+        # arp -a for windows uses '-' instead of ':'
+        connected_users_mac = findall(r"[\w]{1,2}[-][\w]{1,2}[-][\w]{1,2}[-][\w]{1,2}[-][\w]{1,2}[-][\w]{1,2}", output)
+    else:
+        # Looks for any string like "XX:XX:XX:XX:XX:XX"
+        connected_users_mac = findall(r"[\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}[:][\w]{1,2}", output)
 
     available_mac = len(connected_users_ip) == len(connected_users_mac)
     if not available_mac:

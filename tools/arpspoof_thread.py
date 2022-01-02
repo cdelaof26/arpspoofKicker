@@ -2,6 +2,7 @@ from subprocess import DEVNULL
 from subprocess import STDOUT
 from subprocess import Popen
 from threading import Thread
+from tools.config_manager import SYS_NAME
 
 
 class ArpSpoofThread(Thread):
@@ -17,8 +18,11 @@ class ArpSpoofThread(Thread):
 
     def run(self):
         self.is_running = True
-        self.process = Popen(["arpspoof", "-i", self.working_interface, "-t", self.victim, self.gateway],
-                             stdout=DEVNULL, stderr=STDOUT)
+        if SYS_NAME == "nt":
+            self.process = Popen(["arpspoof.exe", self.victim], stdout=DEVNULL, stderr=STDOUT)
+        else:
+            self.process = Popen(["arpspoof", "-i", self.working_interface, "-t", self.victim, self.gateway],
+                                 stdout=DEVNULL, stderr=STDOUT)
         self.process.wait()
         #
         # If arpspoof cannot start or somehow stopped, next code will be reached

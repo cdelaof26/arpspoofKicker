@@ -1,5 +1,6 @@
 .idea
 arpspoof
+*.exe
 *.txt
 *.pyc
 .DS_Store
